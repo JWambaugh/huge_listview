@@ -27,7 +27,7 @@ class TimelineThumb extends StatelessWidget {
     this.foregroundColor = Colors.black87,
     this.textStyle,
     this.elevation = 4,
-    this.taper = 0.8,
+    this.taper = 1.2,
   }) : super(key: key);
 
   @override
@@ -44,8 +44,16 @@ class TimelineThumb extends StatelessWidget {
         elevation: elevation,
         taper: taper,
       ),
-      child: SizedBox(
-        height: height,
+      child: ConstrainedBox(
+        // The point needs its length whether or not there is a date to carry,
+        // and the shape is drawn to fill this box. Left to shrink to its
+        // content, the box came out shorter than the point and the tip was
+        // painted out past the right of it.
+        constraints: BoxConstraints(
+          minWidth: height / 2 + height * taper,
+          minHeight: height,
+          maxHeight: height,
+        ),
         child: Padding(
           // The round end is generous enough that text can sit well into it,
           // so the left side needs little. The right has to clear the point,
@@ -100,8 +108,10 @@ class _CalloutPainter extends CustomPainter {
     final height = size.height;
     final radius = height / 2;
     final reach = height * taper;
-    final width = size.width < radius + reach ? radius + reach : size.width;
-    final body = width - reach;
+    final width = size.width;
+    // Never behind the round end, so a box too narrow for the point loses
+    // some of its length rather than growing one out of its own bounds.
+    final body = width - reach < radius ? radius : width - reach;
 
     /// Sets the angle the sides meet at: the nearer the tip's own centre line,
     /// the sharper the point.

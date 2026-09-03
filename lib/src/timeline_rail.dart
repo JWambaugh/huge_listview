@@ -38,7 +38,7 @@ class TimelineRail extends StatefulWidget {
     required this.metrics,
     required this.dateAt,
     this.alwaysVisible = false,
-    this.width = 54,
+    this.width = 46,
     this.color = Colors.grey,
     this.textStyle,
     this.yearLabel = defaultYearLabel,
@@ -63,8 +63,9 @@ class TimelineRail extends StatefulWidget {
 
   /// A month carries its year when it is the one that starts it, so a run of
   /// months says which year it belongs to without repeating it twelve times.
+  /// Two digits of it, to stay inside a rail sized for plain years.
   static String defaultMonthLabel(DateTime date) => date.month == 1
-      ? '${_months[date.month - 1]} ${date.year}'
+      ? "${_months[date.month - 1]} '${(date.year % 100).toString().padLeft(2, '0')}"
       : _months[date.month - 1];
 
   @override
@@ -185,6 +186,9 @@ class _TimelineRailPainter extends CustomPainter {
   /// Labels need the room to be read, and more of it than a tick does.
   static const double _minLabelGap = 4;
 
+  /// Space between a label and the tick it belongs to.
+  static const double labelGutter = 8;
+
   final List<TimelineMark> marks;
   final ScrollRailMetrics metrics;
   final Color color;
@@ -221,12 +225,16 @@ class _TimelineRailPainter extends CustomPainter {
 
       // A tick that carries a label reaches further in, so the two read as one
       // mark rather than as a line with a caption floating beside it.
-      final from = labelled ? size.width - 10 : size.width - 6;
+      final from = labelled ? size.width - 9 : size.width - 5;
       canvas.drawLine(Offset(from, y), Offset(size.width - 2, y), tick);
 
       if (!labelled) continue;
       final top = y - painter.height / 2;
-      painter.paint(canvas, Offset(size.width - 14 - painter.width, top));
+      // A label with nowhere to fit would be painted out over the list, so it
+      // is dropped and its tick left to speak for it.
+      final left = size.width - labelGutter - painter.width;
+      if (left < 0) continue;
+      painter.paint(canvas, Offset(left, top));
       lastLabelEnd = top + painter.height;
     }
   }

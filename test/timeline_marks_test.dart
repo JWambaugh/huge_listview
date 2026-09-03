@@ -107,9 +107,9 @@ void main() {
       expect(TimelineRail.defaultYearLabel(DateTime(2023, 5)), '2023');
     });
 
-    test('a month carries its year only when it starts one', () {
+    test('a month carries two digits of its year only when it starts one', () {
       expect(TimelineRail.defaultMonthLabel(DateTime(2023, 5)), 'May');
-      expect(TimelineRail.defaultMonthLabel(DateTime(2023, 1)), 'Jan 2023');
+      expect(TimelineRail.defaultMonthLabel(DateTime(2023, 1)), "Jan '23");
     });
 
     test('a day reads in full, for the thumb', () {

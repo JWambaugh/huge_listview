@@ -40,6 +40,12 @@ class HugeTimelineListView<T> extends StatelessWidget {
   final bool showThumb;
 
   final double railWidth;
+
+  /// How far the thumb's point reaches into the rail's own width.
+  ///
+  /// The rail sets its labels against its ticks on the far side, so the near
+  /// side of it is whitespace the point can share rather than stop short of.
+  final double thumbOverlap;
   final Color? railColor;
   final TextStyle? railTextStyle;
   final Color? thumbColor;
@@ -80,13 +86,14 @@ class HugeTimelineListView<T> extends StatelessWidget {
     this.alwaysVisibleRail = false,
     this.showRail = true,
     this.showThumb = true,
-    this.railWidth = 54,
+    this.railWidth = 46,
     this.railColor,
     this.railTextStyle,
     this.thumbColor,
     this.thumbTextColor,
     this.thumbTextStyle,
-    this.thumbTaper = 0.8,
+    this.thumbOverlap = 6,
+    this.thumbTaper = 1.2,
     this.scrollController,
     this.listViewController,
     this.waitBuilder,
@@ -126,7 +133,8 @@ class HugeTimelineListView<T> extends StatelessWidget {
       thumbAnimationDuration: thumbAnimationDuration,
       thumbVisibleDuration: thumbVisibleDuration,
       // The thumb points at the rail, so it has to stand clear of it.
-      thumbPadding: showRail ? EdgeInsets.only(right: railWidth) : null,
+      thumbPadding:
+          showRail ? EdgeInsets.only(right: railWidth - thumbOverlap) : null,
       railBuilder: !showRail
           ? null
           : (context, metrics) => TimelineRail(
