@@ -35,6 +35,10 @@ class HugeTimelineListView<T> extends StatelessWidget {
   /// is better off without one.
   final bool showRail;
 
+  /// Whether to draw the thumb at all. A list showing a single day has no
+  /// timeline to place itself on.
+  final bool showThumb;
+
   final double railWidth;
   final Color? railColor;
   final TextStyle? railTextStyle;
@@ -71,6 +75,7 @@ class HugeTimelineListView<T> extends StatelessWidget {
     this.labelAt,
     this.alwaysVisibleRail = false,
     this.showRail = true,
+    this.showThumb = true,
     this.railWidth = 54,
     this.railColor,
     this.railTextStyle,
@@ -128,6 +133,7 @@ class HugeTimelineListView<T> extends StatelessWidget {
                 textStyle: railTextStyle,
               ),
       thumbBuilder: (background, draw, height, index, alwaysVisible, animation) {
+        if (!showThumb) return const SizedBox.shrink();
         final thumb = TimelineThumb(
           label: _label(index),
           height: height,
