@@ -184,19 +184,41 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
   }
 
   void _sendScroll() {
-    int current = _currentFirst();
-    widget.firstShown?.call(current);
-    if (totalItemCount > 0)
-      scrollKey.currentState?.setPosition(current / totalItemCount, current);
+    final first = _currentFirstPosition();
+    if (first == null) return;
+
+    widget.firstShown?.call(first.index);
+    if (totalItemCount <= 0) return;
+
+    // How far the item at the top of the viewport has scrolled past it. An
+    // index alone only moves the thumb when the list crosses into the next
+    // item, which over a long list is a step too small to see, but over a
+    // short one is a jump across a good part of the track.
+    final extent = first.itemTrailingEdge - first.itemLeadingEdge;
+    final progress =
+        extent <= 0 ? 0.0 : (-first.itemLeadingEdge / extent).clamp(0.0, 1.0);
+
+    scrollKey.currentState
+        ?.setPosition((first.index + progress) / totalItemCount, first.index);
   }
 
-  int _currentFirst() {
-    try {
-      return listener.itemPositions.value.first.index;
-    } catch (e) {
-      return 0;
+  /// The visible item nearest the leading edge of the viewport.
+  ///
+  /// [ItemPositionsListener] makes no promise about the order it reports
+  /// positions in, so the topmost has to be picked out rather than taken from
+  /// the front of the list.
+  ItemPosition? _currentFirstPosition() {
+    ItemPosition? first;
+    for (final position in listener.itemPositions.value) {
+      if (position.itemTrailingEdge <= 0 || position.itemLeadingEdge >= 1)
+        continue;
+      if (first == null || position.itemLeadingEdge < first.itemLeadingEdge)
+        first = position;
     }
+    return first;
   }
+
+  int _currentFirst() => _currentFirstPosition()?.index ?? 0;
 
   @override
   Widget build(BuildContext context) {
