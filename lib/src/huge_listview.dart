@@ -186,7 +186,8 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
   void _sendScroll() {
     int current = _currentFirst();
     widget.firstShown?.call(current);
-    scrollKey.currentState?.setPosition(current / totalItemCount, current);
+    if (totalItemCount > 0)
+      scrollKey.currentState?.setPosition(current / totalItemCount, current);
   }
 
   int _currentFirst() {
@@ -216,10 +217,14 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
           initialScrollIndex: widget.startIndex,
           scrollDirection: widget.scrollDirection,
           onChange: (position) {
-            widget.scrollController
-                ?.jumpTo(index: (position * totalItemCount).floor());
-            widget.controller
-                ?.jumpTo(index: (position * totalItemCount).floor());
+            // Dragging the thumb all the way down gives position 1.0, and
+            // `1.0 * totalItemCount` is one past the last item.
+            final index = (position * totalItemCount)
+                .floor()
+                .clamp(0, max(totalItemCount - 1, 0))
+                .toInt();
+            widget.scrollController?.jumpTo(index: index);
+            widget.controller?.jumpTo(index: index);
           },
           scrollThumbBuilder: widget.thumbBuilder,
           backgroundColor: widget.thumbBackgroundColor,

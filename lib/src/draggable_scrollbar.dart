@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show max, min;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -52,6 +53,20 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
   late Animation<double> thumbAnimation;
   Timer? fadeoutTimer;
 
+  /// The index the thumb last asked the list to jump to, while dragging.
+  ///
+  /// Only used to spot the list reporting back short of it, and to avoid
+  /// asking for the same index twice in a row.
+  int? requestedIndex;
+
+  /// How far down the track the thumb may go for the rest of this drag.
+  ///
+  /// The last items of a list can never be scrolled to the top -- the list
+  /// runs out of content first -- so the bottom of the track maps onto
+  /// positions the list will refuse. `null` until a refusal shows where that
+  /// starts.
+  double? dragOffsetLimit;
+
   double get thumbMin => 0.0;
 
   double get thumbMax => widget.scrollDirection == Axis.vertical //
@@ -80,6 +95,30 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
                 (thumbMax - thumbMin));
       });
     }
+  }
+
+  @override
+  void didUpdateWidget(DraggableScrollbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.totalCount != widget.totalCount) {
+      // A different number of items is a different end of the list, so
+      // anything learnt about where it stops no longer holds.
+      requestedIndex = null;
+      dragOffsetLimit = null;
+    }
+  }
+
+  /// The item the thumb points at when it sits [position] down the track.
+  int indexFor(double position) {
+    if (widget.totalCount <= 0) return 0;
+    return (position * widget.totalCount).floor().clamp(0, widget.totalCount - 1);
+  }
+
+  /// Where on the track the thumb sits when the list starts at [index].
+  double offsetFor(int index) {
+    if (widget.totalCount <= 0) return thumbMin;
+    return (index / widget.totalCount).clamp(0.0, 1.0) * (thumbMax - thumbMin);
   }
 
   @override
@@ -152,6 +191,25 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
       );
 
   void setPosition(double position, int currentFirstIndex) {
+    if (isDragging) {
+      // The list reports back on every scroll frame, the ones caused by the
+      // drag itself included. Following it here would snap the thumb to
+      // `index / totalCount` while the finger still holds it: invisible over
+      // thousands of items, a jump per frame over a dozen.
+      //
+      // The report is still worth one thing. Asking for an index the list
+      // cannot put at the top leaves it short, which is how we find out that
+      // the rest of the track leads nowhere.
+      if (requestedIndex != null && currentFirstIndex < requestedIndex!) {
+        setState(() {
+          this.currentFirstIndex = currentFirstIndex;
+          requestedIndex = currentFirstIndex;
+          dragOffsetLimit = offsetFor(currentFirstIndex);
+          thumbOffset = min(thumbOffset, dragOffsetLimit!);
+        });
+      }
+      return;
+    }
     setState(() {
       this.currentFirstIndex = currentFirstIndex;
       thumbOffset = position * (thumbMax - thumbMin);
@@ -161,30 +219,45 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
   void onDragStart(DragStartDetails details) {
     setState(() {
       isDragging = true;
+      requestedIndex = null;
+      dragOffsetLimit = null;
       fadeoutTimer?.cancel();
     });
   }
 
   void onDragUpdate(DragUpdateDetails details) {
+    if (!isDragging) return;
+
+    final delta = widget.scrollDirection == Axis.vertical
+        ? details.delta.dy
+        : details.delta.dx;
+    if (delta == 0) return;
+
+    if (thumbAnimationController.status != AnimationStatus.forward)
+      thumbAnimationController.forward();
+
+    final track = thumbMax - thumbMin;
+    if (track <= 0) return;
+
+    final offset = (thumbOffset + delta)
+        .clamp(thumbMin, max(thumbMin, dragOffsetLimit ?? thumbMax))
+        .toDouble();
+    final position = offset / track;
+    final index = indexFor(position);
+
     setState(() {
-      if (thumbAnimationController.status != AnimationStatus.forward)
-        thumbAnimationController.forward();
-      if (isDragging &&
-          details.delta.dy != 0 &&
-          widget.scrollDirection == Axis.vertical) {
-        thumbOffset += details.delta.dy;
-        thumbOffset = thumbOffset.clamp(thumbMin, thumbMax);
-        double position = thumbOffset / (thumbMax - thumbMin);
-        widget.onChange?.call(position);
-      } else if (isDragging &&
-          details.delta.dx != 0 &&
-          widget.scrollDirection == Axis.horizontal) {
-        thumbOffset += details.delta.dx;
-        thumbOffset = thumbOffset.clamp(thumbMin, thumbMax);
-        double position = thumbOffset / (thumbMax - thumbMin);
-        widget.onChange?.call(position);
-      }
+      thumbOffset = offset;
+      // The thumb leads and the list follows, so the label has to come from
+      // where the thumb is rather than from where the list has got to.
+      currentFirstIndex = index;
     });
+
+    // Every jump costs the list a re-anchor and a page fetch, and a drag
+    // produces far more updates than it crosses items.
+    if (index != requestedIndex) {
+      requestedIndex = index;
+      widget.onChange?.call(position);
+    }
   }
 
   void onDragEnd(DragEndDetails details) {
@@ -192,7 +265,11 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
       thumbAnimationController.reverse();
       fadeoutTimer = null;
     });
-    setState(() => isDragging = false);
+    setState(() {
+      isDragging = false;
+      requestedIndex = null;
+      dragOffsetLimit = null;
+    });
   }
 
   void keyHandler(RawKeyEvent value) {
