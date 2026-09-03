@@ -95,7 +95,7 @@ class HugeTimelineListView<T> extends StatelessWidget {
     this.velocityThreshold = 128,
     this.firstShown,
     this.padding,
-    this.thumbHeight = 40,
+    this.thumbHeight = 32,
     this.thumbAnimationDuration = kThemeAnimationDuration,
     this.thumbVisibleDuration = const Duration(milliseconds: 1000),
     this.lruMap,

@@ -22,7 +22,7 @@ class TimelineThumb extends StatelessWidget {
   const TimelineThumb({
     Key? key,
     required this.label,
-    this.height = 40,
+    this.height = 32,
     this.backgroundColor = Colors.white,
     this.foregroundColor = Colors.black87,
     this.textStyle,
@@ -90,26 +90,36 @@ class _CalloutPainter extends CustomPainter {
   /// A round end, a straight body, and a point.
   ///
   /// The point is where the thumb is actually aiming, so it sits on the middle
-  /// of the shape's own height. Its sides leave the tip almost level -- the
-  /// control points are close to that middle -- and only turn up towards the
-  /// body once they are clear of it, which is what makes the point sharp
-  /// rather than a blunt wedge.
+  /// of the shape's own height. Each side of it is a cubic with its two ends
+  /// doing different jobs: it leaves the tip almost level, which is what makes
+  /// the point sharp rather than a blunt wedge, and it arrives at the body
+  /// dead level, so the silhouette swells out of the round end and holds its
+  /// full height a while before falling away. A single curve can only do one
+  /// or the other, and doing just the first pinches the shape into a wedge.
   Path _drop(Size size) {
     final height = size.height;
     final radius = height / 2;
     final reach = height * taper;
     final width = size.width < radius + reach ? radius + reach : size.width;
     final body = width - reach;
-    final controlX = width - reach * 0.6;
+
+    /// Sets the angle the sides meet at: the nearer the tip's own centre line,
+    /// the sharper the point.
+    final tipX = width - reach * 0.28;
+    const tipY = 0.44;
+
+    /// Level with the body, and far enough back along the point that the
+    /// curve stays out there rather than turning down at once.
+    final swellX = width - reach * 0.8;
 
     return Path()
       ..moveTo(width, radius)
-      ..quadraticBezierTo(controlX, height * 0.34, body, 0)
+      ..cubicTo(tipX, height * tipY, swellX, 0, body, 0)
       ..lineTo(radius, 0)
       ..arcToPoint(Offset(radius, height),
           radius: Radius.circular(radius), clockwise: false)
       ..lineTo(body, height)
-      ..quadraticBezierTo(controlX, height * 0.66, width, radius)
+      ..cubicTo(swellX, height, tipX, height * (1 - tipY), width, radius)
       ..close();
   }
 
