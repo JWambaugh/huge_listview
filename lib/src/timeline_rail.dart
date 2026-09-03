@@ -159,8 +159,7 @@ class TimelineMarks {
     final scale = years.length >= 4 || months.length > 24
         ? TimelineScale.years
         : TimelineScale.months;
-    return TimelineMarks(
-        scale, scale == TimelineScale.years ? years : months);
+    return TimelineMarks(scale, scale == TimelineScale.years ? years : months);
   }
 }
 

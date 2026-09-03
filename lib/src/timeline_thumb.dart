@@ -71,7 +71,11 @@ class _CalloutPainter extends CustomPainter {
     final path = _drop(size);
     if (elevation > 0)
       canvas.drawShadow(path, Colors.black, elevation, color.a < 1);
-    canvas.drawPath(path, Paint()..color = color..isAntiAlias = true);
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = color
+          ..isAntiAlias = true);
   }
 
   /// A rounded end, a straight body, and a tip: the tip is where the thumb is

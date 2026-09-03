@@ -168,40 +168,56 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
         child: Stack(
           children: [
             RepaintBoundary(child: widget.child),
-            if (widget.railBuilder != null) RepaintBoundary(child: buildRail()),
+            // Positioned has to be the Stack's own child: wrapped in anything,
+            // even a RepaintBoundary, its placement is dropped and the Stack
+            // falls back to aligning it at the top start corner.
+            if (widget.railBuilder != null) buildRail(),
             RepaintBoundary(child: buildDetector()),
           ],
         ),
       );
 
-  /// The rail is laid out down the whole side of the list rather than along
-  /// the track, so a touch anywhere against it lands somewhere sensible, and
-  /// its own coordinates are the list's.
-  Widget buildRail() => Positioned(
-        top: 0,
+  /// Laid out down the whole side of the list rather than along the track, so
+  /// a touch anywhere against it lands somewhere sensible and its own
+  /// coordinates are the list's.
+  Widget buildRail() {
+    final vertical = widget.scrollDirection == Axis.vertical;
+    return Positioned(
+        // Down the trailing edge for a vertical list, along the bottom for a
+        // horizontal one.
+        top: vertical ? 0 : null,
         bottom: 0,
-        right: widget.scrollDirection == Axis.vertical ? 0 : null,
-        left: widget.scrollDirection == Axis.vertical ? null : 0,
+        right: 0,
+        left: vertical ? null : 0,
         child: LayoutBuilder(
-          builder: (context, constraints) => GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTapDown: (details) => seekTo(details.localPosition),
-            onVerticalDragStart: (details) {
-              onDragStart(details);
-              seekTo(details.localPosition);
-            },
-            onVerticalDragUpdate: (details) => seekTo(details.localPosition),
-            onVerticalDragEnd: onDragEnd,
-            onVerticalDragCancel: () => onDragEnd(DragEndDetails()),
-            child: widget.railBuilder!(
-              context,
-              railMetrics(widget.scrollDirection == Axis.vertical
-                  ? constraints.maxHeight
-                  : constraints.maxWidth),
+          builder: (context, constraints) => RepaintBoundary(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) => seekTo(details.localPosition),
+              onVerticalDragStart: (details) {
+                onDragStart(details);
+                seekTo(details.localPosition);
+              },
+              onVerticalDragUpdate: (details) => seekTo(details.localPosition),
+              onVerticalDragEnd: onDragEnd,
+              onVerticalDragCancel: () => onDragEnd(DragEndDetails()),
+              onHorizontalDragStart: (details) {
+                onDragStart(details);
+                seekTo(details.localPosition);
+              },
+              onHorizontalDragUpdate: (details) =>
+                  seekTo(details.localPosition),
+              onHorizontalDragEnd: onDragEnd,
+              onHorizontalDragCancel: () => onDragEnd(DragEndDetails()),
+              child: widget.railBuilder!(
+                context,
+                railMetrics(
+                    vertical ? constraints.maxHeight : constraints.maxWidth),
+              ),
             ),
           ),
-        ),
-      );
+        ));
+  }
 
   ScrollRailMetrics railMetrics(double extent) {
     final track = max(extent - widget.heightScrollThumb, 0.0);

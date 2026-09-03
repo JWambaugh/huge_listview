@@ -132,7 +132,8 @@ class HugeTimelineListView<T> extends StatelessWidget {
                 color: rail,
                 textStyle: railTextStyle,
               ),
-      thumbBuilder: (background, draw, height, index, alwaysVisible, animation) {
+      thumbBuilder:
+          (background, draw, height, index, alwaysVisible, animation) {
         if (!showThumb) return const SizedBox.shrink();
         final thumb = TimelineThumb(
           label: _label(index),

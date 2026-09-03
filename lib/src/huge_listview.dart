@@ -258,8 +258,7 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
       extents.at(position * _scrollableExtent).index;
 
   /// Where along the track the item at [index] starts.
-  double _positionOfIndex(int index) =>
-      _positionAt(extents.offsetOf(index, 0));
+  double _positionOfIndex(int index) => _positionAt(extents.offsetOf(index, 0));
 
   int _currentFirst() {
     ItemPosition? first;
