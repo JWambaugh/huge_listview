@@ -1,10 +1,11 @@
-import 'dart:math' show max;
+import 'dart:math' show max, min;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:huge_listview/src/draggable_scrollbar.dart';
 import 'package:huge_listview/src/draggable_scrollbar_thumbs.dart';
 import 'package:huge_listview/src/huge_listview_controller.dart';
+import 'package:huge_listview/src/list_extents.dart';
 import 'package:huge_listview/src/page_result.dart';
 import 'package:quiver/cache.dart';
 import 'package:quiver/collection.dart';
@@ -146,6 +147,15 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
   dynamic error;
   bool _frameCallbackInProgress = false;
 
+  /// What the list is estimated to measure, so the thumb can be placed by how
+  /// much content is above it rather than by how many items are.
+  final extents = ListExtents();
+
+  /// Items currently standing in for content that has not loaded. Their height
+  /// is the placeholder's, not the item's, so measuring them would teach the
+  /// estimate the wrong thing and unteach it a moment later.
+  final _placeholders = <int>{};
+
   @override
   void initState() {
     super.initState();
@@ -184,41 +194,65 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
   }
 
   void _sendScroll() {
-    final first = _currentFirstPosition();
+    if (extents.length != totalItemCount) {
+      extents.reset(totalItemCount);
+      _placeholders.clear();
+    }
+
+    ItemPosition? first;
+    for (final position in listener.itemPositions.value) {
+      if (!_onScreen(position)) continue;
+      if (!_placeholders.contains(position.index))
+        extents.record(position.index,
+            position.itemTrailingEdge - position.itemLeadingEdge);
+      if (_isAhead(position, first)) first = position;
+    }
     if (first == null) return;
 
     widget.firstShown?.call(first.index);
-    if (totalItemCount <= 0) return;
-
-    // How far the item at the top of the viewport has scrolled past it. An
-    // index alone only moves the thumb when the list crosses into the next
-    // item, which over a long list is a step too small to see, but over a
-    // short one is a jump across a good part of the track.
-    final extent = first.itemTrailingEdge - first.itemLeadingEdge;
-    final progress =
-        extent <= 0 ? 0.0 : (-first.itemLeadingEdge / extent).clamp(0.0, 1.0);
-
-    scrollKey.currentState
-        ?.setPosition((first.index + progress) / totalItemCount, first.index);
+    scrollKey.currentState?.setPosition(_positionOf(first), first.index);
   }
 
-  /// The visible item nearest the leading edge of the viewport.
+  bool _onScreen(ItemPosition position) =>
+      position.itemTrailingEdge >= 0 && position.itemLeadingEdge <= 1;
+
+  /// Whether [position] is nearer the top of the viewport than [other].
   ///
   /// [ItemPositionsListener] makes no promise about the order it reports
-  /// positions in, so the topmost has to be picked out rather than taken from
-  /// the front of the list.
-  ItemPosition? _currentFirstPosition() {
+  /// positions in, so the topmost has to be picked out. An item of no height
+  /// shares its edge with the item after it, and it is the later one the list
+  /// is really at.
+  bool _isAhead(ItemPosition position, ItemPosition? other) =>
+      other == null ||
+      position.itemLeadingEdge < other.itemLeadingEdge ||
+      (position.itemLeadingEdge == other.itemLeadingEdge &&
+          position.index > other.index);
+
+  /// Where along the track the thumb goes for a list showing [first] at
+  /// the top of its viewport.
+  double _positionOf(ItemPosition first) => _positionAt(
+      extents.offsetOf(first.index, -min(first.itemLeadingEdge, 0.0)));
+
+  /// How far the list can scroll, in viewport lengths. The viewport is one
+  /// long and always full, so a list no taller than it cannot scroll at all.
+  double get _scrollableExtent => max(extents.total - 1.0, 0.0);
+
+  /// Where along the track a list scrolled to [offset] puts the thumb.
+  double _positionAt(double offset) => _scrollableExtent <= 0
+      ? 0.0
+      : (offset / _scrollableExtent).clamp(0.0, 1.0);
+
+  /// The item the thumb points at when it sits [position] along the track.
+  int _indexAt(double position) =>
+      extents.at(position * _scrollableExtent).index;
+
+  int _currentFirst() {
     ItemPosition? first;
     for (final position in listener.itemPositions.value) {
-      if (position.itemTrailingEdge <= 0 || position.itemLeadingEdge >= 1)
-        continue;
-      if (first == null || position.itemLeadingEdge < first.itemLeadingEdge)
-        first = position;
+      if (_onScreen(position) && _isAhead(position, first)) first = position;
     }
-    return first;
+    return first?.index ?? 0;
   }
-
-  int _currentFirst() => _currentFirstPosition()?.index ?? 0;
 
   @override
   Widget build(BuildContext context) {
@@ -238,15 +272,18 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
           totalCount: totalItemCount,
           initialScrollIndex: widget.startIndex,
           scrollDirection: widget.scrollDirection,
+          indexAt: _indexAt,
           onChange: (position) {
-            // Dragging the thumb all the way down gives position 1.0, and
-            // `1.0 * totalItemCount` is one past the last item.
-            final index = (position * totalItemCount)
-                .floor()
-                .clamp(0, max(totalItemCount - 1, 0))
-                .toInt();
-            widget.scrollController?.jumpTo(index: index);
-            widget.controller?.jumpTo(index: index);
+            final target = extents.at(position * _scrollableExtent);
+            // Lifting the item's leading edge above the viewport lands the
+            // list between items, so it can follow the thumb the whole way
+            // rather than snapping to whichever item is nearest. A tall item
+            // is several screens of thumb travel on its own.
+            final alignment = -target.into;
+            widget.scrollController
+                ?.jumpTo(index: target.index, alignment: alignment);
+            widget.controller
+                ?.jumpTo(index: target.index, alignment: alignment);
           },
           scrollThumbBuilder: widget.thumbBuilder,
           backgroundColor: widget.thumbBackgroundColor,
@@ -272,6 +309,7 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
               if (pageResult != null && pageResult.items.length > valueIndex) {
                 final value = pageResult.items.elementAt(valueIndex);
                 if (value != null) {
+                  _placeholders.remove(index);
                   return widget.itemBuilder(context, index, value);
                 }
               }
@@ -286,6 +324,7 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
                 SchedulerBinding.instance
                     .scheduleFrameCallback((d) => _deferredReload(context));
               }
+              _placeholders.add(index);
               return ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 10),
                 child: widget.placeholderBuilder(context, index),

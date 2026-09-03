@@ -19,6 +19,13 @@ class DraggableScrollbar extends StatefulWidget {
   final int initialScrollIndex;
   final int currentFirstIndex;
   final ValueChanged<double>? onChange;
+
+  /// Which item the thumb points at from where it sits along the track.
+  ///
+  /// Only used for the label, and to spot the list refusing to go where it
+  /// was sent. Defaults to spreading the items evenly over the track, which
+  /// is right only if they are all the same size.
+  final int Function(double position)? indexAt;
   final ScrollThumbBuilder scrollThumbBuilder;
   final Axis scrollDirection;
 
@@ -37,6 +44,7 @@ class DraggableScrollbar extends StatefulWidget {
     this.currentFirstIndex = 0,
     required this.scrollThumbBuilder,
     this.onChange,
+    this.indexAt,
     this.scrollDirection = Axis.vertical,
   }) : super(key: key);
 
@@ -112,13 +120,11 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
   /// The item the thumb points at when it sits [position] down the track.
   int indexFor(double position) {
     if (widget.totalCount <= 0) return 0;
-    return (position * widget.totalCount).floor().clamp(0, widget.totalCount - 1);
-  }
-
-  /// Where on the track the thumb sits when the list starts at [index].
-  double offsetFor(int index) {
-    if (widget.totalCount <= 0) return thumbMin;
-    return (index / widget.totalCount).clamp(0.0, 1.0) * (thumbMax - thumbMin);
+    final resolve = widget.indexAt;
+    final index = resolve != null
+        ? resolve(position)
+        : (position * widget.totalCount).floor();
+    return index.clamp(0, widget.totalCount - 1);
   }
 
   @override
@@ -204,7 +210,7 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
         setState(() {
           this.currentFirstIndex = currentFirstIndex;
           requestedIndex = currentFirstIndex;
-          dragOffsetLimit = offsetFor(currentFirstIndex);
+          dragOffsetLimit = position * (thumbMax - thumbMin);
           thumbOffset = min(thumbOffset, dragOffsetLimit!);
         });
       }
@@ -252,12 +258,10 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
       currentFirstIndex = index;
     });
 
-    // Every jump costs the list a re-anchor and a page fetch, and a drag
-    // produces far more updates than it crosses items.
-    if (index != requestedIndex) {
-      requestedIndex = index;
-      widget.onChange?.call(position);
-    }
+    // The list is sent to the exact position rather than to the nearest item,
+    // so every move of the thumb is worth passing on.
+    requestedIndex = index;
+    widget.onChange?.call(position);
   }
 
   void onDragEnd(DragEndDetails details) {
