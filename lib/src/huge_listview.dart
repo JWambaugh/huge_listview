@@ -6,6 +6,7 @@ import 'package:huge_listview/src/draggable_scrollbar.dart';
 import 'package:huge_listview/src/draggable_scrollbar_thumbs.dart';
 import 'package:huge_listview/src/huge_listview_controller.dart';
 import 'package:huge_listview/src/list_extents.dart';
+import 'package:huge_listview/src/scroll_rail.dart';
 import 'package:huge_listview/src/page_result.dart';
 import 'package:quiver/cache.dart';
 import 'package:quiver/collection.dart';
@@ -101,6 +102,14 @@ class HugeListView<T> extends StatefulWidget {
   /// The optional predefined LruMap to be used for cache, convenient for using LruMap outside HugeListView.
   final LruMap<int, HugeListViewPageResult<T>>? lruMap;
 
+  /// Called to build a rail down the side of the list, on the same track the
+  /// thumb travels along. Nothing is drawn there if this is left out.
+  final ScrollRailBuilder? railBuilder;
+
+  /// The amount of space by which to inset the thumb, so it can stand clear of
+  /// a rail drawn beside it. Does not affect the list.
+  final EdgeInsetsGeometry? thumbPadding;
+
   const HugeListView({
     Key? key,
     @Deprecated('Use `scrollController` instead.') this.controller,
@@ -129,6 +138,8 @@ class HugeListView<T> extends StatefulWidget {
     this.thumbVisibleDuration = const Duration(milliseconds: 1000),
     this.padding,
     this.lruMap,
+    this.railBuilder,
+    this.thumbPadding,
   })  : assert(pageSize > 0),
         assert(velocityThreshold >= 0),
         super(key: key);
@@ -246,6 +257,10 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
   int _indexAt(double position) =>
       extents.at(position * _scrollableExtent).index;
 
+  /// Where along the track the item at [index] starts.
+  double _positionOfIndex(int index) =>
+      _positionAt(extents.offsetOf(index, 0));
+
   int _currentFirst() {
     ItemPosition? first;
     for (final position in listener.itemPositions.value) {
@@ -273,6 +288,9 @@ class HugeListViewState<T> extends State<HugeListView<T>> {
           initialScrollIndex: widget.startIndex,
           scrollDirection: widget.scrollDirection,
           indexAt: _indexAt,
+          positionOf: _positionOfIndex,
+          railBuilder: widget.railBuilder,
+          padding: widget.thumbPadding,
           onChange: (position) {
             final target = extents.at(position * _scrollableExtent);
             // Lifting the item's leading edge above the viewport lands the

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:huge_listview/src/draggable_scrollbar_thumbs.dart';
+import 'package:huge_listview/src/scroll_rail.dart';
 
 class DraggableScrollbar extends StatefulWidget {
   final Widget child;
@@ -26,6 +27,17 @@ class DraggableScrollbar extends StatefulWidget {
   /// was sent. Defaults to spreading the items evenly over the track, which
   /// is right only if they are all the same size.
   final int Function(double position)? indexAt;
+
+  /// Where along the track the item at an index sits, 0 to 1. The inverse of
+  /// [indexAt], and only needed by a rail. Defaults to spreading the items
+  /// evenly over the track.
+  final double Function(int index)? positionOf;
+
+  /// Builds a rail down the side of the list, on the same track as the thumb.
+  ///
+  /// The rail takes touches of its own: a tap sends the list to that point,
+  /// and a drag along it scrubs the same way holding the thumb does.
+  final ScrollRailBuilder? railBuilder;
   final ScrollThumbBuilder scrollThumbBuilder;
   final Axis scrollDirection;
 
@@ -45,6 +57,8 @@ class DraggableScrollbar extends StatefulWidget {
     required this.scrollThumbBuilder,
     this.onChange,
     this.indexAt,
+    this.positionOf,
+    this.railBuilder,
     this.scrollDirection = Axis.vertical,
   }) : super(key: key);
 
@@ -154,10 +168,91 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
         child: Stack(
           children: [
             RepaintBoundary(child: widget.child),
+            if (widget.railBuilder != null) RepaintBoundary(child: buildRail()),
             RepaintBoundary(child: buildDetector()),
           ],
         ),
       );
+
+  /// The rail is laid out down the whole side of the list rather than along
+  /// the track, so a touch anywhere against it lands somewhere sensible, and
+  /// its own coordinates are the list's.
+  Widget buildRail() => Positioned(
+        top: 0,
+        bottom: 0,
+        right: widget.scrollDirection == Axis.vertical ? 0 : null,
+        left: widget.scrollDirection == Axis.vertical ? null : 0,
+        child: LayoutBuilder(
+          builder: (context, constraints) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: (details) => seekTo(details.localPosition),
+            onVerticalDragStart: (details) {
+              onDragStart(details);
+              seekTo(details.localPosition);
+            },
+            onVerticalDragUpdate: (details) => seekTo(details.localPosition),
+            onVerticalDragEnd: onDragEnd,
+            onVerticalDragCancel: () => onDragEnd(DragEndDetails()),
+            child: widget.railBuilder!(
+              context,
+              railMetrics(widget.scrollDirection == Axis.vertical
+                  ? constraints.maxHeight
+                  : constraints.maxWidth),
+            ),
+          ),
+        ),
+      );
+
+  ScrollRailMetrics railMetrics(double extent) {
+    final track = max(extent - widget.heightScrollThumb, 0.0);
+    return ScrollRailMetrics(
+      trackExtent: track,
+      thumbExtent: widget.heightScrollThumb,
+      position: track <= 0 ? 0.0 : (thumbOffset / track).clamp(0.0, 1.0),
+      totalCount: widget.totalCount,
+      isDragging: isDragging,
+      visibility: thumbAnimation,
+      positionOf: widget.positionOf ?? evenPositionOf,
+    );
+  }
+
+  double evenPositionOf(int index) => widget.totalCount <= 0
+      ? 0.0
+      : (index / widget.totalCount).clamp(0.0, 1.0);
+
+  /// Send the list to the point on the track the rail was touched at.
+  void seekTo(Offset localPosition) {
+    final track = thumbMax - thumbMin;
+    if (track <= 0) return;
+
+    // The middle of the thumb is what lines up with a mark on the rail, so
+    // that is what goes under the finger.
+    final touch = widget.scrollDirection == Axis.vertical
+        ? localPosition.dy
+        : localPosition.dx;
+    final offset = (touch - widget.heightScrollThumb / 2)
+        .clamp(thumbMin, thumbMax)
+        .toDouble();
+    final position = offset / track;
+
+    if (thumbAnimationController.status != AnimationStatus.forward)
+      thumbAnimationController.forward();
+    setState(() {
+      thumbOffset = offset;
+      currentFirstIndex = indexFor(position);
+    });
+    requestedIndex = currentFirstIndex;
+    widget.onChange?.call(position);
+    if (!isDragging) scheduleFadeOut();
+  }
+
+  void scheduleFadeOut() {
+    fadeoutTimer?.cancel();
+    fadeoutTimer = Timer(widget.thumbVisibleDuration, () {
+      thumbAnimationController.reverse();
+      fadeoutTimer = null;
+    });
+  }
 
   Widget buildKeyboard() {
     if (defaultTargetPlatform == TargetPlatform.windows)
@@ -265,10 +360,7 @@ class DraggableScrollbarState extends State<DraggableScrollbar>
   }
 
   void onDragEnd(DragEndDetails details) {
-    fadeoutTimer = Timer(widget.thumbVisibleDuration, () {
-      thumbAnimationController.reverse();
-      fadeoutTimer = null;
-    });
+    scheduleFadeOut();
     setState(() {
       isDragging = false;
       requestedIndex = null;
