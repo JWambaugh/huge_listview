@@ -46,6 +46,10 @@ class HugeTimelineListView<T> extends StatelessWidget {
   final Color? thumbTextColor;
   final TextStyle? thumbTextStyle;
 
+  /// How far the thumb's point reaches out past its body, as a share of its
+  /// height.
+  final double thumbTaper;
+
   final ItemScrollController? scrollController;
   final HugeListViewController? listViewController;
   final int pageSize;
@@ -82,6 +86,7 @@ class HugeTimelineListView<T> extends StatelessWidget {
     this.thumbColor,
     this.thumbTextColor,
     this.thumbTextStyle,
+    this.thumbTaper = 0.8,
     this.scrollController,
     this.listViewController,
     this.waitBuilder,
@@ -138,9 +143,14 @@ class HugeTimelineListView<T> extends StatelessWidget {
         final thumb = TimelineThumb(
           label: _label(index),
           height: height,
-          backgroundColor: thumbColor ?? scheme.surfaceContainerHighest,
-          foregroundColor: thumbTextColor ?? scheme.onSurface,
+          // The thumb has to read against the photos behind it, which are
+          // whatever colour they happen to be. `inverseSurface` is the role
+          // that is deliberately far from the background in either theme,
+          // rather than a surface tint that all but disappears in one of them.
+          backgroundColor: thumbColor ?? scheme.inverseSurface,
+          foregroundColor: thumbTextColor ?? scheme.onInverseSurface,
           textStyle: thumbTextStyle,
+          taper: thumbTaper,
         );
         return alwaysVisible
             ? thumb

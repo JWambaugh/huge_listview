@@ -13,14 +13,21 @@ class TimelineThumb extends StatelessWidget {
   final TextStyle? textStyle;
   final double elevation;
 
+  /// How far the tip reaches out past the body, as a share of the height.
+  ///
+  /// A longer reach is a narrower point: the sides have further to travel to
+  /// meet, so they meet at a shallower angle.
+  final double taper;
+
   const TimelineThumb({
     Key? key,
     required this.label,
-    this.height = 48,
+    this.height = 40,
     this.backgroundColor = Colors.white,
     this.foregroundColor = Colors.black87,
     this.textStyle,
     this.elevation = 4,
+    this.taper = 0.8,
   }) : super(key: key);
 
   @override
@@ -35,14 +42,16 @@ class TimelineThumb extends StatelessWidget {
       painter: _CalloutPainter(
         color: backgroundColor,
         elevation: elevation,
-        textDirection: Directionality.of(context),
+        taper: taper,
       ),
       child: SizedBox(
         height: height,
         child: Padding(
-          // Room for the round end on the left and the point on the right, so
-          // the text sits in the body of the drop rather than in its tip.
-          padding: EdgeInsets.only(left: height * 0.4, right: height * 0.6),
+          // The round end is generous enough that text can sit well into it,
+          // so the left side needs little. The right has to clear the point,
+          // which is where the shape runs out of height.
+          padding: EdgeInsets.only(
+              left: height * 0.22, right: height * taper * 0.72),
           child: Center(
             widthFactor: 1,
             child: text == null
@@ -58,12 +67,12 @@ class TimelineThumb extends StatelessWidget {
 class _CalloutPainter extends CustomPainter {
   final Color color;
   final double elevation;
-  final TextDirection textDirection;
+  final double taper;
 
   _CalloutPainter({
     required this.color,
     required this.elevation,
-    required this.textDirection,
+    required this.taper,
   });
 
   @override
@@ -78,27 +87,35 @@ class _CalloutPainter extends CustomPainter {
           ..isAntiAlias = true);
   }
 
-  /// A rounded end, a straight body, and a tip: the tip is where the thumb is
-  /// actually pointing, so it sits on the middle of the shape's own height.
+  /// A round end, a straight body, and a point.
+  ///
+  /// The point is where the thumb is actually aiming, so it sits on the middle
+  /// of the shape's own height. Its sides leave the tip almost level -- the
+  /// control points are close to that middle -- and only turn up towards the
+  /// body once they are clear of it, which is what makes the point sharp
+  /// rather than a blunt wedge.
   Path _drop(Size size) {
     final height = size.height;
     final radius = height / 2;
-    final taper = radius * 0.9;
-    final width = size.width < radius + taper ? radius + taper : size.width;
-    final body = width - taper;
+    final reach = height * taper;
+    final width = size.width < radius + reach ? radius + reach : size.width;
+    final body = width - reach;
+    final controlX = width - reach * 0.6;
 
     return Path()
       ..moveTo(width, radius)
-      ..quadraticBezierTo(body + taper * 0.45, height * 0.08, body, 0)
+      ..quadraticBezierTo(controlX, height * 0.34, body, 0)
       ..lineTo(radius, 0)
       ..arcToPoint(Offset(radius, height),
           radius: Radius.circular(radius), clockwise: false)
       ..lineTo(body, height)
-      ..quadraticBezierTo(body + taper * 0.45, height * 0.92, width, radius)
+      ..quadraticBezierTo(controlX, height * 0.66, width, radius)
       ..close();
   }
 
   @override
   bool shouldRepaint(covariant _CalloutPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.elevation != elevation;
+      oldDelegate.color != color ||
+      oldDelegate.elevation != elevation ||
+      oldDelegate.taper != taper;
 }
