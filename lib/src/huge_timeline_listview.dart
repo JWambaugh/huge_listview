@@ -7,6 +7,17 @@ import 'package:huge_listview/src/timeline_thumb.dart';
 import 'package:quiver/collection.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
+/// Builds the thumb for a [HugeTimelineListView].
+///
+/// [label] is what the thumb is pointing at, already resolved from `labelAt`
+/// or `dateAt`, and is null where the item has no date of its own. [height] is
+/// the thumb height the list was given; a thumb that ignores it will not line
+/// up with where the list thinks the handle is.
+///
+/// Fading the thumb in and out is the list's job, so a builder need not.
+typedef TimelineThumbBuilder = Widget Function(
+    BuildContext context, String? label, double height);
+
 /// A [HugeListView] whose items run in date order, scrolled against a date
 /// scale rather than a bare thumb.
 ///
@@ -40,6 +51,13 @@ class HugeTimelineListView<T> extends StatelessWidget {
   final bool showThumb;
 
   final double railWidth;
+
+  /// Draws the thumb, for a caller whose chrome is not a flat pill - a frosted
+  /// one, say. The default builds a [TimelineThumb] from the colours below;
+  /// supply this and they are yours to apply instead, with
+  /// [timelineThumbPath] and [TimelineThumbClipper] on hand for anything that
+  /// wants the same silhouette.
+  final TimelineThumbBuilder? thumbBuilder;
 
   /// How far the thumb's point reaches into the rail's own width.
   ///
@@ -87,6 +105,7 @@ class HugeTimelineListView<T> extends StatelessWidget {
     this.showRail = true,
     this.showThumb = true,
     this.railWidth = 46,
+    this.thumbBuilder,
     this.railColor,
     this.railTextStyle,
     this.thumbColor,
@@ -148,18 +167,23 @@ class HugeTimelineListView<T> extends StatelessWidget {
       thumbBuilder:
           (background, draw, height, index, alwaysVisible, animation) {
         if (!showThumb) return const SizedBox.shrink();
-        final thumb = TimelineThumb(
-          label: _label(index),
-          height: height,
-          // The thumb has to read against the photos behind it, which are
-          // whatever colour they happen to be. `inverseSurface` is the role
-          // that is deliberately far from the background in either theme,
-          // rather than a surface tint that all but disappears in one of them.
-          backgroundColor: thumbColor ?? scheme.inverseSurface,
-          foregroundColor: thumbTextColor ?? scheme.onInverseSurface,
-          textStyle: thumbTextStyle,
-          taper: thumbTaper,
-        );
+        final label = _label(index);
+        final build = thumbBuilder;
+        final thumb = build != null
+            ? build(context, label, height)
+            : TimelineThumb(
+                label: label,
+                height: height,
+                // The thumb has to read against the photos behind it, which
+                // are whatever colour they happen to be. `inverseSurface` is
+                // the role that is deliberately far from the background in
+                // either theme, rather than a surface tint that all but
+                // disappears in one of them.
+                backgroundColor: thumbColor ?? scheme.inverseSurface,
+                foregroundColor: thumbTextColor ?? scheme.onInverseSurface,
+                textStyle: thumbTextStyle,
+                taper: thumbTaper,
+              );
         return alwaysVisible
             ? thumb
             : FadeTransition(opacity: animation, child: thumb);
